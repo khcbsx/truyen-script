@@ -1,636 +1,774 @@
+/* ====================================================================
+   truyen.js — v8
+   Ho tro:
+     - truyenfull.vision  : HTML WordPress, fetch + DOMParser
+     - tvtruyen.co.uk     : HTML WordPress, fetch + DOMParser
+     - xtruyen.vn         : HTML JS-rendered, doc DOM sau 3.5s
+     - truyenfree.org     : SPA Next.js, doc DOM sau render, khong reload
+   ==================================================================== */
 (function () {
-  /* ================================================================
-     truyen.js — v7
-     Ho tro: truyenfree.org (SPA) + 14 trang HTML khac
-     Tampermonkey tu dong chay lai sau moi reload
-  ================================================================ */
+  'use strict';
 
-  var LS_STATE_KEY = 'truyen_cex_state_v7';
+  if (window.__TRUYEN_CEX_RUNNING__) return;
+  window.__TRUYEN_CEX_RUNNING__ = true;
 
-  // ── 1. DANH SACH TRANG HO TRO ────────────────────────────────────
+  /* ----------------------------------------------------------------
+     1. DANH SACH TRANG HO TRO (hien thi tren banner)
+  ---------------------------------------------------------------- */
   var SUPPORTED = [
-    { label: 'TruyenFree',  host: 'truyenfree.org'      },
-    { label: 'TruyenFull',  host: 'truyenfull.vision'    },
-    { label: 'TvTruyen',    host: 'tvtruyen.co.uk'       },
-    { label: 'XTruyen',     host: 'xtruyen.vn'           },
-    { label: 'MeTruyenChu', host: 'metruyenchu.com.vn'   },
-    { label: 'TangThuVien', host: 'tangthuvien.net'      },
-    { label: 'SSTruyen',    host: 'sstruyen.com.vn'      },
-    { label: 'TruyenYY',    host: 'truyenyy.co'          },
-    { label: 'TruyenTV',    host: 'truyentv.vn'          },
-    { label: 'HemTruyen',   host: 'hemtruyen.vn'         },
-    { label: 'TruyenChu',   host: 'truyenchu.com.vn'     },
-    { label: 'MeTruyenVN',  host: 'metruyenvn.com'       },
-    { label: 'Convert',     host: 'truyenconvert.net'    },
-    { label: 'WikiDich',    host: 'wikidich.com'         },
-    { label: 'TruyenHay',   host: 'truyenhay.vn'         }
+    { label: 'TruyenFull',  host: 'truyenfull.vision' },
+    { label: 'TvTruyen',    host: 'tvtruyen.co.uk'    },
+    { label: 'XTruyen',     host: 'xtruyen.vn'        },
+    { label: 'TruyenFree',  host: 'truyenfree.org'    }
   ];
 
-  // ── 2. CAU HINH TUNG TRANG ────────────────────────────────────────
+  /* ----------------------------------------------------------------
+     2. CAU HINH TUNG TRANG
+     mode: 'fetch' -> dung fetch() + DOMParser (truyenfull, tvtruyen)
+           'dom'   -> doc DOM hien tai sau delay (xtruyen, truyenfree)
+     spa: true     -> khong dung location.href, chi doc DOM 1 lan (truyenfree)
+  ---------------------------------------------------------------- */
   var SITE_CONFIGS = {
-    'truyenfree.org': {
-      type: 'spa', label: 'TruyenFree'
-    },
     'truyenfull.vision': {
-      type: 'html', label: 'TruyenFull',
-      contentSel: '#chapter-c',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap'
+      mode        : 'fetch',
+      contentSels : ['#chapter-c', '#chapter-content', '.chapter-c',
+                     'div[id*="chapter"]'],
+      titleSels   : ['h2.chapter-title', '.chapter-title', 'h2', 'h1'],
+      nextSels    : ['a#next_chap', 'a.next_chap', 'a[href*="chuong-"]'],
+      nextText    : 'tiep'
     },
     'tvtruyen.co.uk': {
-      type: 'html', label: 'TvTruyen',
-      contentSel: '#chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    'a.btn-chapter-nav'
+      mode        : 'fetch',
+      contentSels : ['#chapter-c', '#chapter-content', '.chapter-content',
+                     'div[id*="chapter"]', '.box-chapter-content'],
+      titleSels   : ['h2.chapter-title', '.chapter-title', 'h2', 'h1'],
+      nextSels    : ['a.btn-chapter-nav', 'a[class*="chapter-nav"]',
+                     'a[href*="chuong-"]'],
+      nextText    : 'tiep'
     },
     'xtruyen.vn': {
-      type: 'html', label: 'XTruyen',
-      contentSel: '.reading-content .text-left, .reading-content, .entry-content',
-      titleSel:   'h2, .chapter-name',
-      nextSel:    'a.btn.next_page, a.next_page'
+      mode        : 'dom',
+      spa         : false,
+      contentSels : ['.reading-content .text-left', '.reading-content',
+                     '.entry-content', '#chapter-content'],
+      titleSels   : ['h2', '.chapter-name', 'h1', '.chapter-title'],
+      nextSels    : ['a.btn.next_page', 'a.next_page', 'a[rel="next"]',
+                     'a[href*="chuong-"]'],
+      nextText    : 'tiep',
+      domDelay    : 3500
     },
-    'metruyenchu.com.vn': {
-      type: 'html', label: 'MeTruyenChu',
-      contentSel: '.chapter-content, #chapter-content, .content-chapter',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a.next-chap, a[id*="next"]'
-    },
-    'tangthuvien.net': {
-      type: 'html', label: 'TangThuVien',
-      contentSel: '#box-chapter-content, .box-chapter-content',
-      titleSel:   'h2, .chapter-title',
-      nextSel:    'a#next-chapter, a.next-chapter, a[title*="sau"], a[title*="tiep"]'
-    },
-    'sstruyen.com.vn': {
-      type: 'html', label: 'SSTruyen',
-      contentSel: '#chapter-c, .chapter-c, #chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a.next-chap'
-    },
-    'truyenyy.co': {
-      type: 'html', label: 'TruyenYY',
-      contentSel: '#chapter-c, .chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'truyentv.vn': {
-      type: 'html', label: 'TruyenTV',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a.next-chap, a[title*="tiep"]'
-    },
-    'hemtruyen.vn': {
-      type: 'html', label: 'HemTruyen',
-      contentSel: '#chapter-c, .chapter-c, #chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'truyenchu.com.vn': {
-      type: 'html', label: 'TruyenChu',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'metruyenvn.com': {
-      type: 'html', label: 'MeTruyenVN',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'truyenconvert.net': {
-      type: 'html', label: 'Convert',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'wikidich.com': {
-      type: 'html', label: 'WikiDich',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
-    },
-    'truyenhay.vn': {
-      type: 'html', label: 'TruyenHay',
-      contentSel: '#chapter-c, #chapter-content, .chapter-content',
-      titleSel:   '.chapter-title, h2',
-      nextSel:    '#next_chap, a[id*="next"]'
+    'truyenfree.org': {
+      mode        : 'dom',
+      spa         : true,
+      contentSels : ['.chapter-content', '#chapter-content',
+                     'div[class*="chapter"] p', '.content-chapter',
+                     'article .content', '.reading-content',
+                     'div[class*="content"] p'],
+      titleSels   : ['h1.chapter-title', '.chapter-title', 'h1', 'h2',
+                     '[class*="chapter-name"]'],
+      nextSels    : ['a[href*="chuong-"]:last-of-type',
+                     'button[class*="next"]', 'a[class*="next"]',
+                     'a[aria-label*="next"]', 'a[title*="tiep"]'],
+      nextText    : 'tiep',
+      domDelay    : 2000
     }
   };
 
-  // ── 3. PHAT HIEN TRANG ────────────────────────────────────────────
+  /* ----------------------------------------------------------------
+     3. DETECT SITE
+  ---------------------------------------------------------------- */
   var hostname = location.hostname.replace(/^www\./, '');
-  var siteCfg  = SITE_CONFIGS[hostname] || null;
-  var isSPA    = siteCfg && siteCfg.type === 'spa';
+  var cfg = SITE_CONFIGS[hostname];
 
-  // ── 4. SPA INTERCEPTOR (truyenfree.org) ───────────────────────────
-  if (isSPA) {
-    if (!window._truyen_origLog) {
-      window._truyen_origLog = console.log;
-    }
-    console.log = function () {
-      var args = Array.prototype.slice.call(arguments);
-      var obj  = args[0];
-      if (
-        obj && typeof obj === 'object' &&
-        typeof obj.number  === 'number' &&
-        typeof obj.name    === 'string' &&
-        typeof obj.content === 'string' &&
-        obj.content.length > 50
-      ) {
-        window._latestChapter = obj;
-      }
-      return window._truyen_origLog.apply(console, args);
-    };
+  /* ----------------------------------------------------------------
+     4. STATE (sessionStorage)
+  ---------------------------------------------------------------- */
+  var STATE_KEY = 'truyen_cex_state_v8';
+
+  function saveState(obj) {
+    try { sessionStorage.setItem(STATE_KEY, JSON.stringify(obj)); } catch(e) {}
+  }
+  function loadState() {
+    try {
+      var s = sessionStorage.getItem(STATE_KEY);
+      return s ? JSON.parse(s) : null;
+    } catch(e) { return null; }
+  }
+  function clearState() {
+    try { sessionStorage.removeItem(STATE_KEY); } catch(e) {}
   }
 
-  // ── 5. HELPERS ────────────────────────────────────────────────────
-  function getNum() {
-    var m = location.pathname.match(/chuong[-_](\d+)/i);
-    return m ? parseInt(m[1], 10) : 0;
-  }
-
+  /* ----------------------------------------------------------------
+     5. HELPERS
+  ---------------------------------------------------------------- */
   function getNumFromUrl(url) {
     var m = (url || '').match(/chuong[-_](\d+)/i);
-    return m ? parseInt(m[1], 10) : 0;
+    return m ? parseInt(m[1], 10) : NaN;
   }
 
-  function cleanText(s) {
-    return (s || '')
+  function cleanText(raw) {
+    return (raw || '')
       .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]+\n/g, '\n')
+      .replace(/[ \t]{2,}/g, ' ')
       .trim();
   }
 
-  function queryFirst(selStr) {
-    var sels = selStr.split(',');
+  // Tim element co noi dung dai nhat trong danh sach selector
+  function findEl(doc, sels, minLen) {
+    minLen = minLen || 0;
+    var best = null, bestLen = 0;
     for (var i = 0; i < sels.length; i++) {
       try {
-        var el = document.querySelector(sels[i].trim());
+        var el = doc.querySelector(sels[i]);
         if (el) {
-          var t = (el.innerText || el.textContent || '').trim();
-          if (t.length > 0) return { el: el, text: t };
+          var len = (el.textContent || '').trim().length;
+          if (len > minLen && len > bestLen) {
+            bestLen = len;
+            best = el;
+          }
         }
-      } catch (e) {}
+      } catch(e) {}
     }
-    return null;
+    return best;
   }
 
-  function getContentFromDOM() {
-    if (!siteCfg || !siteCfg.contentSel) return '';
-    var r = queryFirst(siteCfg.contentSel);
-    return r ? cleanText(r.text) : '';
-  }
-
-  function getTitleFromDOM() {
-    if (!siteCfg || !siteCfg.titleSel) return document.title;
-    var r = queryFirst(siteCfg.titleSel);
-    return r ? r.text : document.title;
-  }
-
-  function getNextUrl() {
-    if (!siteCfg || !siteCfg.nextSel) return null;
-    var sels = siteCfg.nextSel.split(',');
+  // Tim next URL: quet qua tung selector, loc theo text co 'tiep'
+  function findNextUrl(doc, sels, nextText, currentUrl) {
     for (var i = 0; i < sels.length; i++) {
       try {
-        var els = document.querySelectorAll(sels[i].trim());
-        for (var j = 0; j < els.length; j++) {
-          var el  = els[j];
-          var txt = (el.innerText || el.title || el.id || '').toLowerCase();
-          if (/(tr.?c|prev|truoc)/i.test(txt)) continue;
-          if (el.href && /chuong/i.test(el.href)) return el.href;
+        var links = doc.querySelectorAll(sels[i]);
+        for (var j = 0; j < links.length; j++) {
+          var a = links[j];
+          var txt = (a.innerText || a.textContent || a.getAttribute('aria-label') || a.title || '').toLowerCase();
+          var href = a.href || a.getAttribute('href') || '';
+          if (!href || href === '#' || href === currentUrl) continue;
+          if (nextText && txt.indexOf(nextText) !== -1) return href;
         }
-      } catch (e) {}
+      } catch(e) {}
     }
-    // Fallback: tim link so chuong = hien tai + 1
-    var cur = getNum();
-    if (cur > 0) {
-      var links = [].slice.call(document.querySelectorAll('a[href*="chuong"]'));
-      for (var k = 0; k < links.length; k++) {
-        var m = (links[k].href || '').match(/chuong[-_]?(\d+)/i);
-        if (m && parseInt(m[1], 10) === cur + 1) return links[k].href;
+    // Fallback: tim tat ca link co chuong-N+1
+    try {
+      var curN = getNumFromUrl(currentUrl);
+      if (!isNaN(curN)) {
+        var nextN = curN + 1;
+        var allLinks = doc.querySelectorAll('a[href*="chuong-' + nextN + '"]');
+        if (allLinks.length > 0) return allLinks[0].href;
       }
-    }
+    } catch(e) {}
     return null;
   }
 
-  function getCurrentChapter() {
-    if (isSPA) {
-      var lc = window._latestChapter;
-      if (lc && lc.content && lc.content.length > 50) {
-        return {
-          number:  lc.number,
-          title:   lc.name || ('Chuong ' + lc.number),
-          content: cleanText(lc.content)
-        };
-      }
-      return { number: getNum(), title: document.title, content: '' };
-    }
-    var num     = getNum();
-    var title   = getTitleFromDOM();
-    var content = getContentFromDOM();
-    if (!num) {
-      var mm = (title.match(/\d+/) || [])[0];
-      num = mm ? parseInt(mm, 10) : 0;
-    }
-    return { number: num, title: title, content: content };
+  // Xay dung URL chuong ke tiep theo pattern +1
+  function buildNextUrl(url, n) {
+    var newUrl = url.replace(/chuong[-_](\d+)/i, 'chuong-' + n);
+    return newUrl !== url ? newUrl : null;
   }
 
-  // ── 6. STATE ──────────────────────────────────────────────────────
-  function saveState(collected, start, end) {
-    if (isSPA) return;
-    try {
-      sessionStorage.setItem(LS_STATE_KEY, JSON.stringify({
-        collected: collected,
-        start:     start,
-        end:       end,
-        site:      hostname,
-        ts:        Date.now()
-      }));
-    } catch (e) {}
+  /* ----------------------------------------------------------------
+     6. FETCH CHAPTER (fetch + DOMParser)
+  ---------------------------------------------------------------- */
+  function fetchChapter(url, callback) {
+    fetch(url, { credentials: 'include' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function(html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var contentEl = findEl(doc, cfg.contentSels, 200);
+        var titleEl   = findEl(doc, cfg.titleSels, 1);
+        var nextUrl   = findNextUrl(doc, cfg.nextSels, cfg.nextText, url);
+        var num       = getNumFromUrl(url);
+
+        if (!contentEl) {
+          callback({ error: 'Khong tim thay noi dung chuong ' + num });
+          return;
+        }
+
+        var text = cleanText(contentEl.textContent);
+        if (text.length < 100) {
+          callback({ error: 'Noi dung qua ngan (' + text.length + ' chars) chuong ' + num });
+          return;
+        }
+
+        // Chuyen URL tuong doi sang tuyet doi
+        if (nextUrl && nextUrl.charAt(0) === '/') {
+          nextUrl = location.origin + nextUrl;
+        }
+
+        callback({
+          number  : num,
+          title   : titleEl ? titleEl.textContent.trim() : ('Chuong ' + num),
+          content : text,
+          nextUrl : nextUrl || buildNextUrl(url, num + 1),
+          url     : url
+        });
+      })
+      .catch(function(e) {
+        callback({ error: 'Fetch loi: ' + e.message });
+      });
   }
 
-  function loadState() {
-    try {
-      var raw = sessionStorage.getItem(LS_STATE_KEY);
-      if (!raw) return null;
-      var s = JSON.parse(raw);
-      if (!s || s.site !== hostname) return null;
-      if (Date.now() - s.ts > 3 * 3600 * 1000) {
-        sessionStorage.removeItem(LS_STATE_KEY);
-        return null;
-      }
-      return s;
-    } catch (e) { return null; }
-  }
-
-  function clearState() {
-    try { sessionStorage.removeItem(LS_STATE_KEY); } catch (e) {}
-  }
-
-  // ── 7. GLOBAL STATE ───────────────────────────────────────────────
-  window._cex_stop      = false;
-  window._cex_collected = [];
-  window._cex_start     = 0;
-  window._cex_end       = 0;
-
-  // ── 8. UI HELPERS ─────────────────────────────────────────────────
-  function setStatus(msg) {
-    try { var el = document.getElementById('cex_status'); if (el) el.innerText = msg; } catch (e) {}
-  }
-  function setProgress(msg) {
-    try { var el = document.getElementById('cex_progress'); if (el) el.innerText = msg; } catch (e) {}
-  }
-  function setBusy(on) {
-    try {
-      var b1 = document.getElementById('cex_btn_start');
-      var b2 = document.getElementById('cex_btn_stop');
-      if (b1) b1.disabled = on;
-      if (b2) b2.style.display = on ? 'inline-block' : 'none';
-    } catch (e) {}
-  }
-
-  // ── 9. DOWNLOAD ───────────────────────────────────────────────────
-  function doDownload() {
-    var col = window._cex_collected;
-    if (!col || !col.length) { setStatus('Chua co chuong nao!'); return; }
-    var parts = col.map(function (ch) { return ch.title + '\n\n' + ch.content; });
-    var text  = parts.join('\n\n────────────────────\n\n');
-    var slug  = (location.pathname.split('/')[1] || 'truyen').replace(/[^a-z0-9\-]/gi, '-');
-    var fname = slug + '_ch' + window._cex_start + '-' + window._cex_end + '.txt';
-    try {
-      var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      var url  = URL.createObjectURL(blob);
-      var a    = document.createElement('a');
-      a.href = url; a.download = fname;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
-      setStatus('Da tai: ' + fname + ' (' + col.length + ' chuong)');
-      setProgress('');
-    } catch (e) { setStatus('Loi tao file: ' + e.message); }
-  }
-
-  // ── 10. AUTO COLLECT ──────────────────────────────────────────────
-  function finishAuto() {
-    window._cex_stop = false;
-    clearState();
-    setBusy(false);
-    doDownload();
-  }
-
-  function waitForContent(callback, waited) {
-    waited = waited || 0;
-    var content = getContentFromDOM();
-    if (content && content.length > 50) {
-      callback();
-    } else if (waited >= 8000) {
-      setStatus('Het thoi gian cho noi dung!');
-      finishAuto();
-    } else {
-      setTimeout(function () { waitForContent(callback, waited + 500); }, 500);
-    }
-  }
-
-  function autoCollect(lastNum) {
-    if (window._cex_stop) { finishAuto(); return; }
-
-    var urlNum = getNum();
-    var ch     = getCurrentChapter();
-    var curNum = ch.number || urlNum;
-
-    // Van o chuong cu, cho them
-    if (!curNum || curNum === lastNum) {
-      setTimeout(function () { autoCollect(lastNum); }, 800);
-      return;
-    }
-
-    // Thu thap neu trong khoang
-    if (curNum >= window._cex_start && curNum <= window._cex_end) {
-      var dup = window._cex_collected.some(function (c) { return c.number === curNum; });
-      if (!dup && ch.content && ch.content.length > 50) {
-        window._cex_collected.push({ number: curNum, title: ch.title, content: ch.content });
-        window._cex_collected.sort(function (a, b) { return a.number - b.number; });
-        saveState(window._cex_collected, window._cex_start, window._cex_end);
-        var total = window._cex_end - window._cex_start + 1;
-        setProgress(window._cex_collected.length + '/' + total + ' | Chuong ' + curNum);
-      }
-    }
-
-    // Xong chua?
-    if (curNum >= window._cex_end) { finishAuto(); return; }
-
-    if (isSPA) {
-      // SPA: click nut chuong sau
-      var nextBtn = null;
+  /* ----------------------------------------------------------------
+     7. READ DOM CHAPTER (doc DOM hien tai sau delay)
+  ---------------------------------------------------------------- */
+  function readDomChapter(callback) {
+    var delay = (cfg && cfg.domDelay) ? cfg.domDelay : 2500;
+    setTimeout(function() {
       try {
-        var links = [].slice.call(document.querySelectorAll('a[href*="chuong"]'));
-        for (var i = 0; i < links.length; i++) {
-          var t = (links[i].innerText || '').trim();
-          if (t === 'Chuong sau' || t === 'Ch\u01b0\u01a1ng sau') { nextBtn = links[i]; break; }
+        var contentEl = findEl(document, cfg.contentSels, 200);
+        var titleEl   = findEl(document, cfg.titleSels, 1);
+        var nextUrl   = findNextUrl(document, cfg.nextSels, cfg.nextText, location.href);
+        var num       = getNumFromUrl(location.href);
+
+        if (!contentEl) {
+          // Fallback: tim element co text dai nhat tren trang
+          var allDivs = document.querySelectorAll('div, article, section');
+          var maxLen = 0;
+          allDivs.forEach(function(el) {
+            var len = (el.innerText || '').trim().length;
+            if (len > maxLen && len < 100000) {
+              maxLen = len;
+              contentEl = el;
+            }
+          });
+          if (!contentEl || maxLen < 500) {
+            callback({ error: 'Khong tim thay noi dung. Trang chua load xong?' });
+            return;
+          }
         }
-      } catch (e) {}
-      if (!nextBtn) { setStatus('Khong tim thay nut Chuong sau!'); finishAuto(); return; }
-      setStatus('Dang tai chuong ' + (curNum + 1) + '...');
-      window._latestChapter = null;
-      try { nextBtn.click(); } catch (e) {}
-      var waited = 0;
-      function waitSPA() {
-        var lc  = window._latestChapter;
-        var num = (lc && lc.number) || getNum();
-        if (num && num !== curNum) {
-          setTimeout(function () { autoCollect(curNum); }, 300);
-        } else if (waited >= 10000) {
-          setStatus('Het thoi gian cho SPA!'); finishAuto();
-        } else {
-          waited += 400; setTimeout(waitSPA, 400);
+
+        var rawText = contentEl.innerText || contentEl.textContent || '';
+        var text = cleanText(rawText);
+        if (text.length < 100) {
+          callback({ error: 'Noi dung qua ngan tai chuong ' + num });
+          return;
         }
+
+        if (nextUrl && nextUrl.charAt(0) === '/') {
+          nextUrl = location.origin + nextUrl;
+        }
+
+        callback({
+          number  : num,
+          title   : titleEl ? (titleEl.innerText || titleEl.textContent).trim() : ('Chuong ' + num),
+          content : text,
+          nextUrl : nextUrl || buildNextUrl(location.href, num + 1),
+          url     : location.href
+        });
+      } catch(e) {
+        callback({ error: 'DOM loi: ' + e.message });
       }
-      setTimeout(waitSPA, 600);
-    } else {
-      // HTML: navigate bang location.href
-      var nextUrl = null;
-      try { nextUrl = getNextUrl(); } catch (e) {}
-      if (!nextUrl) { setStatus('Khong tim thay link chuong tiep!'); finishAuto(); return; }
-      setStatus('Chuyen sang chuong ' + (curNum + 1) + '...');
-      saveState(window._cex_collected, window._cex_start, window._cex_end);
-      setTimeout(function () { location.href = nextUrl; }, 500);
-    }
+    }, delay);
   }
 
-  // ── 11. RESUME sau reload ─────────────────────────────────────────
-  function doResume(state) {
-    window._cex_start     = state.start;
-    window._cex_end       = state.end;
-    window._cex_collected = state.collected || [];
-    window._cex_stop      = false;
-    setBusy(true);
-    var total = state.end - state.start + 1;
-    setProgress(window._cex_collected.length + '/' + total + ' | Dang tiep tuc...');
-    setStatus('Tu dong tiep tuc sau reload...');
-    waitForContent(function () {
-      autoCollect(getNum() - 1);
-    });
-  }
+  /* ----------------------------------------------------------------
+     8. XAY DUNG UI
+  ---------------------------------------------------------------- */
+  var oldW = document.getElementById('__truyen_cex_popup__');
+  if (oldW) oldW.remove();
 
-  // ── 12. GLOBAL HANDLERS ───────────────────────────────────────────
-  window.cex_start = function () {
-    try {
-      var s = parseInt(document.getElementById('cex_inp_start').value, 10);
-      var e = parseInt(document.getElementById('cex_inp_end').value,   10);
-      if (isNaN(s) || isNaN(e) || s < 1 || e < s) { setStatus('So chuong khong hop le!'); return; }
-      if (e - s > 500) { setStatus('Toi da 500 chuong/lan!'); return; }
-      window._cex_start     = s;
-      window._cex_end       = e;
-      window._cex_collected = [];
-      window._cex_stop      = false;
-      clearState();
-      setBusy(true);
-      setProgress('');
-      setStatus('Bat dau tu chuong ' + s + ' den ' + e + '...');
-      if (isSPA) {
-        autoCollect(getNum() - 1);
-      } else {
-        var curNum = getNum();
-        if (curNum === s) {
-          waitForContent(function () { autoCollect(s - 1); });
-        } else {
-          var baseUrl = location.href.replace(/chuong[-_]?\d+/i, 'chuong-' + s);
-          saveState([], s, e);
-          location.href = baseUrl;
-        }
-      }
-    } catch (e) { setStatus('Loi: ' + e.message); setBusy(false); }
+  var W = document.createElement('div');
+  W.id = '__truyen_cex_popup__';
+  W.style.cssText = [
+    'position:fixed','top:10px','right:10px','z-index:2147483647',
+    'width:320px','background:#fff','border:2px solid #27ae60',
+    'border-radius:10px','box-shadow:0 4px 20px rgba(0,0,0,0.3)',
+    'font-family:Arial,sans-serif','font-size:13px','color:#222',
+    'overflow:hidden'
+  ].join(';');
+
+  // Header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = [
+    'background:#27ae60','color:#fff','padding:8px 12px',
+    'font-weight:bold','font-size:14px',
+    'display:flex','justify-content:space-between','align-items:center',
+    'cursor:move'
+  ].join(';');
+  hdr.innerHTML = '<span>📚 Truyen Extractor v8</span>';
+
+  var closeBtn = document.createElement('span');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'cursor:pointer;font-size:16px;line-height:1;padding:0 4px;';
+  closeBtn.onclick = function() {
+    W.remove();
+    window.__TRUYEN_CEX_RUNNING__ = false;
+    clearState();
   };
+  hdr.appendChild(closeBtn);
+  W.appendChild(hdr);
 
-  window.cex_stop = function () {
-    window._cex_stop = true;
-    setStatus('Dang dung...');
-  };
+  // Banner
+  var ban = document.createElement('div');
+  ban.style.cssText = [
+    'display:flex','gap:5px','flex-wrap:wrap',
+    'padding:6px 10px','background:#f8f9fa',
+    'border-bottom:1px solid #eee'
+  ].join(';');
+  SUPPORTED.forEach(function(s) {
+    var on = (hostname === s.host);
+    var chip = document.createElement('span');
+    chip.style.cssText = [
+      'display:inline-block','padding:2px 8px','border-radius:10px',
+      'font-size:11px','font-weight:bold','cursor:pointer',
+      'border:1px solid ' + (on ? '#27ae60' : '#bbb'),
+      'background:'       + (on ? '#27ae60' : '#f0f0f0'),
+      'color:'            + (on ? '#fff'     : '#666'),
+      'white-space:nowrap','line-height:1.6'
+    ].join(';');
+    chip.textContent = (on ? '✓ ' : '') + s.label;
+    chip.title = 'Mo ' + s.host + ' trong tab moi';
+    chip.onmouseenter = function() { this.style.opacity = '0.75'; };
+    chip.onmouseleave = function() { this.style.opacity = '1'; };
+    chip.onclick = function() { window.open('https://' + s.host, '_blank'); };
+    ban.appendChild(chip);
+  });
+  W.appendChild(ban);
 
-  window.cex_getCurrent = function () {
-    try {
-      var ch = getCurrentChapter();
-      var ta = document.getElementById('cex_ta');
-      if (ch && ch.content && ta) {
-        ta.value = ch.title + '\n\n' + ch.content;
-        setStatus('Chuong ' + ch.number + ': ' + ch.title);
-      } else {
-        setStatus('Chua doc duoc noi dung!');
-      }
-    } catch (e) { setStatus('Loi: ' + e.message); }
-  };
+  // Body
+  var body = document.createElement('div');
+  body.style.cssText = 'padding:10px 12px;';
 
-  window.cex_copy = function () {
-    try {
-      var ta = document.getElementById('cex_ta');
-      if (!ta || !ta.value) { setStatus('Khong co gi de copy!'); return; }
-      ta.focus(); ta.select();
-      try { document.execCommand('copy'); } catch (ex) {}
-      if (navigator.clipboard) navigator.clipboard.writeText(ta.value).catch(function () {});
-      setStatus('Da copy!');
-    } catch (e) {}
-  };
-
-  // ── 13. BUILD UI ──────────────────────────────────────────────────
-  function buildUI() {
-    var old = document.getElementById('cex_wrap');
-    if (old) old.remove();
-
-    var curNum = getNum();
-
-    var W = document.createElement('div');
-    W.id = 'cex_wrap';
-    W.style.cssText = 'position:fixed;left:12px;top:60px;width:480px;z-index:2147483647;background:#fff;border:2px solid #333;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.5);font-family:Arial,sans-serif;font-size:13px;max-height:92vh;overflow-y:auto;';
-
-    // Header
-    var hdr = document.createElement('div');
-    hdr.style.cssText = 'background:#2c3e50;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center;';
-    var htitle = document.createElement('b');
-    htitle.innerText = 'Trich xuat truyen — ' + (siteCfg ? siteCfg.label : 'Chua ho tro');
-    hdr.appendChild(htitle);
-    var btnX = document.createElement('button');
-    btnX.innerHTML = '&#x2715;';
-    btnX.style.cssText = 'background:none;border:0;color:#fff;font-size:20px;cursor:pointer;';
-    btnX.onclick = function () { W.remove(); };
-    hdr.appendChild(btnX);
-    W.appendChild(hdr);
-
-    // Banner 15 trang — dang luoi cuon
-    var ban = document.createElement('div');
-    ban.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;padding:6px 10px;background:#f8f9fa;border-bottom:1px solid #eee;max-height:72px;overflow-y:auto;';
-    SUPPORTED.forEach(function (s) {
-      var on = (hostname === s.host);
-      var c  = document.createElement('span');
-      c.style.cssText = [
-        'display:inline-block', 'padding:2px 8px', 'border-radius:10px',
-        'font-size:11px', 'font-weight:bold', 'line-height:1.6',
-        'border:1px solid ' + (on ? '#27ae60' : '#bbb'),
-        'background:'       + (on ? '#27ae60' : '#f0f0f0'),
-        'color:'            + (on ? '#fff'    : '#666'),
-        'white-space:nowrap', 'cursor:pointer'
-      ].join(';');
-      c.innerText    = (on ? '\u2713 ' : '') + s.label;
-      c.title        = 'Mo ' + s.label + ' — ' + s.host;
-      c.onclick      = function () { window.open('https://' + s.host, '_blank'); };
-      c.onmouseenter = function () { this.style.opacity = '0.75'; };
-      c.onmouseleave = function () { this.style.opacity = '1'; };
-      ban.appendChild(c);
-    });
-    W.appendChild(ban);
-
-    // Body
-    var body = document.createElement('div');
-    body.style.cssText = 'padding:12px;display:flex;flex-direction:column;gap:8px;';
-
-    // Canh bao neu trang chua ho tro
-    if (!siteCfg) {
-      var warn = document.createElement('div');
-      warn.style.cssText = 'background:#f8d7da;border:1px solid #f5c6cb;border-radius:4px;padding:8px;font-size:12px;color:#721c24;';
-      warn.innerText = 'Trang nay chua duoc ho tro! Click vao nhan ben tren de chuyen trang.';
-      body.appendChild(warn);
-    }
-
-    // Input row
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
-
-    function mkLabel(t) { var el = document.createElement('b'); el.innerText = t; return el; }
-    function mkInput(id, val) {
-      var el = document.createElement('input');
-      el.type = 'number'; el.id = id; el.value = val;
-      el.style.cssText = 'width:72px;padding:4px 6px;border:1px solid #aaa;border-radius:4px;font-size:13px;color:#000;background:#fff;';
-      return el;
-    }
-    function mkBtn(id, html, bg, fn) {
-      var el = document.createElement('button');
-      el.id = id || ''; el.innerHTML = html;
-      el.style.cssText = 'padding:5px 12px;background:' + bg + ';color:#fff;border:0;border-radius:4px;cursor:pointer;font-weight:bold;';
-      el.onclick = fn;
-      return el;
-    }
-
-    row.appendChild(mkLabel('Tu:'));
-    row.appendChild(mkInput('cex_inp_start', curNum || 1));
-    row.appendChild(mkLabel('Den:'));
-    row.appendChild(mkInput('cex_inp_end', (curNum || 1) + 49));
-
-    var btnStart = mkBtn('cex_btn_start', 'Bat dau', '#27ae60', window.cex_start);
-    row.appendChild(btnStart);
-    var btnStop = mkBtn('cex_btn_stop', 'Dung & Luu', '#c0392b', window.cex_stop);
-    btnStop.style.display = 'none';
-    row.appendChild(btnStop);
-    body.appendChild(row);
-
-    // Progress
-    var prog = document.createElement('div');
-    prog.id = 'cex_progress';
-    prog.style.cssText = 'color:#2980b9;font-size:12px;min-height:14px;';
-    body.appendChild(prog);
-
-    // Status
-    var stat = document.createElement('div');
-    stat.id = 'cex_status';
-    stat.style.cssText = 'color:#555;font-size:12px;min-height:14px;';
-    stat.innerText = siteCfg ? 'Nhap so chuong roi nhan Bat dau.' : 'Trang chua duoc ho tro.';
-    body.appendChild(stat);
-
-    var hr = document.createElement('hr');
-    hr.style.cssText = 'border:0;border-top:1px solid #eee;margin:2px 0;';
-    body.appendChild(hr);
-
-    // Manual row
-    var mrow = document.createElement('div');
-    mrow.style.cssText = 'display:flex;gap:8px;align-items:center;';
-    mrow.appendChild(mkLabel('Thu cong:'));
-    mrow.appendChild(mkBtn('', 'Lay chuong hien tai', '#2980b9', window.cex_getCurrent));
-    mrow.appendChild(mkBtn('', 'Copy', '#7f8c8d', window.cex_copy));
-    body.appendChild(mrow);
-
-    // Textarea
-    var ta = document.createElement('textarea');
-    ta.id = 'cex_ta';
-    ta.style.cssText = 'width:100%;height:200px;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:4px;resize:vertical;font-size:13px;line-height:1.6;color:#222;background:#fff;';
-    body.appendChild(ta);
-
+  // Thong bao neu trang khong ho tro
+  if (!cfg) {
+    body.innerHTML = [
+      '<div style="color:#e74c3c;text-align:center;padding:12px;">',
+      '⚠️ Trang <b>' + hostname + '</b><br>chưa được hỗ trợ.',
+      '<br><small style="color:#999">Chỉ hỗ trợ 4 trang trên.</small>',
+      '</div>'
+    ].join('');
     W.appendChild(body);
     document.body.appendChild(W);
+    makeDraggable();
+    return;
   }
 
-  // ── 14. INIT ──────────────────────────────────────────────────────
-  function init() {
-    buildUI();
+  // Input tu/den chuong
+  var curNum = getNumFromUrl(location.href);
 
-    // Thu resume neu dang giua qua trinh auto
-    if (!isSPA) {
-      var state = loadState();
-      if (state && state.start && state.end) {
-        doResume(state);
+  function makeRow(label, id, placeholder, val) {
+    var d = document.createElement('div');
+    d.style.cssText = 'display:flex;align-items:center;margin-bottom:6px;gap:6px;';
+    d.innerHTML = '<label style="width:90px;font-size:12px;color:#555;flex-shrink:0;">' + label + '</label>' +
+      '<input id="' + id + '" type="number" min="1" placeholder="' + placeholder + '" ' +
+      'value="' + (val || '') + '" style="flex:1;padding:4px 6px;border:1px solid #ccc;' +
+      'border-radius:4px;font-size:13px;">';
+    return d;
+  }
+
+  body.appendChild(makeRow('Từ chương:', 'cex_from', 'VD: 1', isNaN(curNum) ? '' : curNum));
+  body.appendChild(makeRow('Đến chương:', 'cex_to', 'VD: 50', ''));
+
+  // Buttons
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+
+  function makeBtn(id, text, bg) {
+    var b = document.createElement('button');
+    b.id = id;
+    b.textContent = text;
+    b.style.cssText = [
+      'flex:1','padding:6px','border:none','border-radius:5px',
+      'cursor:pointer','font-size:13px','font-weight:bold',
+      'background:' + bg, 'color:#fff'
+    ].join(';');
+    return b;
+  }
+
+  var startBtn = makeBtn('cex_start_btn', '▶ Bắt đầu',  '#27ae60');
+  var stopBtn  = makeBtn('cex_stop_btn',  '⏹ Dừng',     '#e74c3c');
+  var dlBtn    = makeBtn('cex_dl_btn',    '⬇ Tải TXT',  '#3498db');
+  stopBtn.disabled = true;
+  dlBtn.disabled   = true;
+
+  btnRow.appendChild(startBtn);
+  btnRow.appendChild(stopBtn);
+  btnRow.appendChild(dlBtn);
+  body.appendChild(btnRow);
+
+  // Progress & Status
+  var prog = document.createElement('div');
+  prog.id = 'cex_progress';
+  prog.style.cssText = 'font-size:12px;color:#27ae60;margin-bottom:4px;min-height:16px;';
+
+  var stat = document.createElement('div');
+  stat.id = 'cex_status';
+  stat.style.cssText = 'font-size:11px;color:#888;margin-bottom:6px;min-height:14px;word-break:break-all;';
+  stat.textContent = 'San sang.';
+
+  body.appendChild(prog);
+  body.appendChild(stat);
+
+  // Preview textarea
+  var pvToggle = document.createElement('div');
+  pvToggle.style.cssText = 'font-size:11px;color:#3498db;cursor:pointer;margin-bottom:4px;';
+  pvToggle.textContent   = '▶ Xem nội dung đã thu thập';
+
+  var ta = document.createElement('textarea');
+  ta.id = 'cex_textarea';
+  ta.readOnly = true;
+  ta.style.cssText = [
+    'width:100%','height:100px','resize:vertical',
+    'font-size:11px','border:1px solid #ddd','border-radius:4px',
+    'padding:4px','box-sizing:border-box','display:none'
+  ].join(';');
+  ta.placeholder = 'Noi dung hien thi sau khi thu thap...';
+
+  pvToggle.onclick = function() {
+    if (ta.style.display === 'none') {
+      ta.style.display = 'block';
+      pvToggle.textContent = '▼ Ẩn nội dung';
+    } else {
+      ta.style.display = 'none';
+      pvToggle.textContent = '▶ Xem nội dung đã thu thập';
+    }
+  };
+
+  body.appendChild(pvToggle);
+  body.appendChild(ta);
+  W.appendChild(body);
+  document.body.appendChild(W);
+
+  // Keo tha
+  function makeDraggable() {
+    var drag = false, ox = 0, oy = 0;
+    hdr.addEventListener('mousedown', function(e) {
+      drag = true;
+      ox = e.clientX - W.offsetLeft;
+      oy = e.clientY - W.offsetTop;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+      if (!drag) return;
+      W.style.left  = (e.clientX - ox) + 'px';
+      W.style.top   = (e.clientY - oy) + 'px';
+      W.style.right = 'auto';
+    });
+    document.addEventListener('mouseup', function() { drag = false; });
+  }
+  makeDraggable();
+
+  /* ----------------------------------------------------------------
+     9. BIEN TRANG THAI
+  ---------------------------------------------------------------- */
+  var collected = [];
+  var isRunning = false;
+  var stopFlag  = false;
+
+  function setStatus(msg) {
+    var el = document.getElementById('cex_status');
+    if (el) el.textContent = msg;
+  }
+  function setProgress(done, total) {
+    var el = document.getElementById('cex_progress');
+    if (el) el.textContent = '✅ ' + done + ' / ' + total + ' chương';
+  }
+  function appendPreview(chapter) {
+    var el = document.getElementById('cex_textarea');
+    if (el) el.value += '=== ' + chapter.title + ' ===\n' + chapter.content + '\n\n';
+  }
+  function enableDl() {
+    var b = document.getElementById('cex_dl_btn');
+    if (b) b.disabled = false;
+  }
+
+  /* ----------------------------------------------------------------
+     10. DOWNLOAD
+  ---------------------------------------------------------------- */
+  function doDownload() {
+    if (!collected.length) { alert('Chua co du lieu de tai!'); return; }
+    var slug = location.pathname.split('/').filter(Boolean)[0] || 'truyen';
+    var f = collected[0].number, l = collected[collected.length - 1].number;
+    var fname = slug + '_ch' + f + '-' + l + '.txt';
+    var sep   = '\n\n' + '═'.repeat(50) + '\n\n';
+    var text  = collected.map(function(c) {
+      return '=== ' + c.title + ' ===\n\n' + c.content;
+    }).join(sep);
+
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus('✅ Da tai: ' + fname);
+  }
+  dlBtn.onclick = doDownload;
+
+  /* ----------------------------------------------------------------
+     11. FINISH COLLECTION
+  ---------------------------------------------------------------- */
+  function finishCollection() {
+    isRunning = false; stopFlag = false;
+    var sb = document.getElementById('cex_start_btn');
+    var xb = document.getElementById('cex_stop_btn');
+    if (sb) { sb.disabled = false; sb.textContent = '▶ Bắt đầu'; }
+    if (xb) xb.disabled = true;
+    if (collected.length > 0) {
+      enableDl();
+      setStatus('✅ Hoan tat! ' + collected.length + ' chuong. Nhan ⬇ de tai.');
+    } else {
+      setStatus('Da dung.');
+    }
+    clearState();
+  }
+
+  /* ----------------------------------------------------------------
+     12. FETCH LOOP (truyenfull, tvtruyen)
+  ---------------------------------------------------------------- */
+  function fetchLoop(url, endNum, totalCount) {
+    if (stopFlag || !url) { finishCollection(); return; }
+    var curN = getNumFromUrl(url);
+    if (isNaN(curN) || curN > endNum) { finishCollection(); return; }
+
+    setStatus('Dang tai chuong ' + curN + '...');
+
+    fetchChapter(url, function(res) {
+      if (stopFlag) { finishCollection(); return; }
+      if (res.error) {
+        setStatus('⚠️ ' + res.error + ' — thu lai sau 2s');
+        setTimeout(function() { fetchLoop(url, endNum, totalCount); }, 2000);
         return;
       }
-    }
 
-    // Load chuong hien tai vao textarea
-    setTimeout(function () {
-      try {
-        var ch = getCurrentChapter();
-        var ta = document.getElementById('cex_ta');
-        if (ch && ch.content && ch.content.length > 50 && ta) {
-          ta.value = ch.title + '\n\n' + ch.content;
-          setStatus('Chuong ' + ch.number + ' san sang.');
-        } else if (isSPA) {
-          setStatus('Cho SPA load... Thu chuyen chuong roi nhan Lay chuong hien tai.');
-        } else {
-          setStatus('Chua doc duoc noi dung. Thu nhan Lay chuong hien tai.');
-        }
-      } catch (e) {}
-    }, 1500);
+      collected.push({ number: res.number, title: res.title, content: res.content });
+      setProgress(collected.length, totalCount);
+      appendPreview(res);
+      enableDl();
+
+      if (res.number >= endNum || !res.nextUrl) {
+        finishCollection();
+      } else {
+        setTimeout(function() { fetchLoop(res.nextUrl, endNum, totalCount); }, 900);
+      }
+    });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  /* ----------------------------------------------------------------
+     13. DOM LOOP (xtruyen – reload sau moi chuong)
+  ---------------------------------------------------------------- */
+  function domLoop(endNum, totalCount) {
+    if (stopFlag) { finishCollection(); return; }
+    setStatus('Cho JS render noi dung...');
+
+    readDomChapter(function(res) {
+      if (stopFlag) { finishCollection(); return; }
+      if (res.error) {
+        setStatus('⚠️ ' + res.error);
+        finishCollection(); return;
+      }
+
+      collected.push({ number: res.number, title: res.title, content: res.content });
+      setProgress(collected.length, totalCount);
+      appendPreview(res);
+      enableDl();
+
+      if (res.number >= endNum || !res.nextUrl) {
+        finishCollection(); clearState();
+      } else {
+        saveState({
+          collected : collected,
+          endNum    : endNum,
+          totalCount: totalCount,
+          nextUrl   : res.nextUrl,
+          running   : true
+        });
+        setStatus('Chuyen sang chuong ' + (res.number + 1) + '...');
+        setTimeout(function() { location.href = res.nextUrl; }, 800);
+      }
+    });
+  }
+
+  /* ----------------------------------------------------------------
+     14. SPA LOOP (truyenfree – chi doc DOM, next click)
+  ---------------------------------------------------------------- */
+  function spaLoop(endNum, totalCount) {
+    if (stopFlag) { finishCollection(); return; }
+    setStatus('Cho SPA render noi dung...');
+
+    readDomChapter(function(res) {
+      if (stopFlag) { finishCollection(); return; }
+      if (res.error) {
+        setStatus('⚠️ ' + res.error);
+        // Thu click nut next roi thu lai
+        var nextBtn = findNextElement();
+        if (nextBtn) {
+          nextBtn.click();
+          setTimeout(function() { spaLoop(endNum, totalCount); }, cfg.domDelay + 1000);
+        } else {
+          finishCollection();
+        }
+        return;
+      }
+
+      collected.push({ number: res.number, title: res.title, content: res.content });
+      setProgress(collected.length, totalCount);
+      appendPreview(res);
+      enableDl();
+
+      if (res.number >= endNum || !res.nextUrl) {
+        finishCollection();
+      } else {
+        // Chuyen den chuong tiep: click nut hoac thay doi URL qua history
+        setStatus('Chuyen sang chuong ' + (res.number + 1) + '...');
+        var nextBtn = findNextElement();
+        if (nextBtn) {
+          nextBtn.click();
+        } else {
+          // Fallback: thay URL bang history.pushState
+          history.pushState({}, '', res.nextUrl);
+          window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+        }
+        setTimeout(function() { spaLoop(endNum, totalCount); }, cfg.domDelay + 500);
+      }
+    });
+  }
+
+  function findNextElement() {
+    for (var i = 0; i < cfg.nextSels.length; i++) {
+      try {
+        var els = document.querySelectorAll(cfg.nextSels[i]);
+        for (var j = 0; j < els.length; j++) {
+          var txt = (els[j].innerText || els[j].textContent || '').toLowerCase();
+          if (txt.indexOf('tiep') !== -1 || txt.indexOf('next') !== -1) return els[j];
+          if (els[j].href && els[j].href !== location.href) return els[j];
+        }
+      } catch(e) {}
+    }
+    return null;
+  }
+
+  /* ----------------------------------------------------------------
+     15. RESUME SAU RELOAD (chi dom mode, khong spa)
+  ---------------------------------------------------------------- */
+  function tryResume() {
+    if (!cfg || cfg.spa) return false;
+    if (cfg.mode !== 'dom') return false;
+    var state = loadState();
+    if (!state || !state.running) return false;
+
+    // Kiem tra dang o dung URL tiep theo
+    var stateN = getNumFromUrl(state.nextUrl || '');
+    var curN   = getNumFromUrl(location.href);
+    if (isNaN(stateN) || stateN !== curN) { clearState(); return false; }
+
+    // Khoi phuc
+    collected   = state.collected   || [];
+    var endNum  = state.endNum      || 1;
+    var total   = state.totalCount  || endNum;
+
+    // Cap nhat UI
+    var ta2 = document.getElementById('cex_textarea');
+    if (ta2 && collected.length) {
+      ta2.value = collected.map(function(c) {
+        return '=== ' + c.title + ' ===\n' + c.content;
+      }).join('\n\n' + '─'.repeat(40) + '\n\n');
+    }
+    if (collected.length) { enableDl(); setProgress(collected.length, total); }
+
+    isRunning = true;
+    var sb = document.getElementById('cex_start_btn');
+    var xb = document.getElementById('cex_stop_btn');
+    if (sb) { sb.disabled = true; sb.textContent = '⏳ Dang chay...'; }
+    if (xb) xb.disabled = false;
+
+    setStatus('↩️ Tiep tuc tu chuong da luu...');
+    domLoop(endNum, total);
+    return true;
+  }
+
+  /* ----------------------------------------------------------------
+     16. START BUTTON
+  ---------------------------------------------------------------- */
+  startBtn.onclick = function() {
+    var fromEl = document.getElementById('cex_from');
+    var toEl   = document.getElementById('cex_to');
+    var fromN  = parseInt(fromEl ? fromEl.value : '', 10);
+    var toN    = parseInt(toEl   ? toEl.value   : '', 10);
+
+    if (isNaN(fromN) || fromN < 1) {
+      alert('Nhap so chuong bat dau hop le!'); return;
+    }
+    if (isNaN(toN) || toN < fromN) {
+      alert('So chuong ket thuc phai >= bat dau!'); return;
+    }
+
+    collected = []; isRunning = true; stopFlag = false;
+    clearState();
+
+    var sb = document.getElementById('cex_start_btn');
+    var xb = document.getElementById('cex_stop_btn');
+    var db = document.getElementById('cex_dl_btn');
+    if (sb) { sb.disabled = true; sb.textContent = '⏳ Dang chay...'; }
+    if (xb) xb.disabled = false;
+    if (db) db.disabled = true;
+
+    var ta2 = document.getElementById('cex_textarea');
+    if (ta2) ta2.value = '';
+
+    var totalCount = toN - fromN + 1;
+    var curN = getNumFromUrl(location.href);
+
+    if (cfg.mode === 'fetch') {
+      // Xay dung URL chuong dau tien
+      var startUrl;
+      if (!isNaN(curN) && curN === fromN) {
+        startUrl = location.href;
+      } else {
+        startUrl = location.href.replace(/chuong[-_]\d+/i, 'chuong-' + fromN);
+        if (startUrl === location.href && !startUrl.match(/chuong-\d+/)) {
+          alert('Khong the xac dinh URL chuong. Hay mo dung chuong bat dau!');
+          finishCollection(); return;
+        }
+      }
+      fetchLoop(startUrl, toN, totalCount);
+
+    } else if (cfg.spa) {
+      // SPA: neu chua o dung chuong, chuyen truoc
+      if (!isNaN(curN) && curN === fromN) {
+        spaLoop(toN, totalCount);
+      } else {
+        var targetUrl = location.href.replace(/chuong[-_]\d+/i, 'chuong-' + fromN);
+        history.pushState({}, '', targetUrl);
+        window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+        setTimeout(function() { spaLoop(toN, totalCount); }, cfg.domDelay + 500);
+      }
+
+    } else {
+      // DOM + reload (xtruyen)
+      if (!isNaN(curN) && curN === fromN) {
+        domLoop(toN, totalCount);
+      } else {
+        var targetUrl2 = location.href.replace(/chuong[-_]\d+/i, 'chuong-' + fromN);
+        saveState({
+          collected: [], endNum: toN, totalCount: totalCount,
+          nextUrl: targetUrl2, running: true
+        });
+        setStatus('Chuyen den chuong ' + fromN + '...');
+        setTimeout(function() { location.href = targetUrl2; }, 500);
+      }
+    }
+  };
+
+  /* ----------------------------------------------------------------
+     17. STOP BUTTON
+  ---------------------------------------------------------------- */
+  stopBtn.onclick = function() {
+    stopFlag = true;
+    var xb = document.getElementById('cex_stop_btn');
+    if (xb) xb.disabled = true;
+    setStatus('Dang dung...');
+    clearState();
+  };
+
+  /* ----------------------------------------------------------------
+     18. AUTO RESUME khi load lai trang (chi dom mode)
+  ---------------------------------------------------------------- */
+  if (!tryResume()) {
+    setStatus('San sang. Nhap so chuong va nhan Bat dau.');
   }
 
 })();
