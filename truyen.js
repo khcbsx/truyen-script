@@ -7,13 +7,13 @@
 var SITE_CONFIGS = {
   'truyenfree.org': {
     type: 'spa',
-    label: 'TruyenFree',
+    label: 'TruyenFree.org',
     nextText: ['Chuong sau','Chương sau'],
     nextSelectors: []
   },
   'truyenfull.vision': {
     type: 'html',
-    label: 'TruyenFull',
+    label: 'TruyenFull.vision',
     contentSelectors: ['#chapter-c','.chapter-c','div[id="chapter-c"]'],
     titleSelectors: ['h2.chapter-title','.chapter-title','h2','h1'],
     nextSelectors: ['a[title*="sau"]','a[title*="tiep"]','#next_chap','.next-chap'],
@@ -21,7 +21,7 @@ var SITE_CONFIGS = {
   },
   'tvtruyen.co.uk': {
     type: 'html',
-    label: 'TvTruyen',
+    label: 'TvTruyen.co.uk',
     contentSelectors: ['#chapter-content','.chapter-content','#content'],
     titleSelectors: ['.chapter-title','h2','h1'],
     nextSelectors: ['a.btn-chapter-nav','a.chapter-modal-next'],
@@ -29,7 +29,7 @@ var SITE_CONFIGS = {
   },
   'xtruyen.vn': {
     type: 'html',
-    label: 'XTruyen',
+    label: 'XTruyen.vn',
     contentSelectors: [
       '.reading-content .text-left',
       '.reading-content',
