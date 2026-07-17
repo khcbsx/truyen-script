@@ -1,3 +1,15 @@
+// ==UserScript==
+// @name         Truyen Extractor v8.1
+// @namespace    http://tampermonkey.net/
+// @version      8.1
+// @description  Hỗ trợ tải truyện từ truyenfull, tvtruyen, xtruyen, truyenfree
+// @author       You
+// @match        *://truyenfull.vision/*
+// @match        *://tvtruyen.co.uk/*
+// @match        *://xtruyen.vn/*
+// @match        *://truyenfree.org/*
+// @grant        none
+// ==/UserScript==
 /* ====================================================================
    truyen.js — v8.1
    Ho tro:
