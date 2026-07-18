@@ -4,18 +4,18 @@
 // @version      8.1
 // @description  Hỗ trợ tải truyện từ truyenfull, tvtruyen, xtruyen, truyenfree
 // @author       You
-// @match        *://truyenfull.vision/*
-// @match        *://tvtruyen.co.uk/*
-// @match        *://xtruyen.vn/*
+// @match        *://truyenfull.live/*
+// @match        *://tvtruyen.site/*
+// @match        *://xtruyen.net/*
 // @match        *://truyenfree.org/*
 // @grant        none
 // ==/UserScript==
 /* ====================================================================
    truyen.js — v8.1
    Ho tro:
-     - truyenfull.vision  : fetch + lay the <p> ben trong #chapter-c
-     - tvtruyen.co.uk     : fetch + lay the <p> ben trong #chapter-c
-     - xtruyen.vn         : doc DOM sau 3.5s + lay <p> hoac textContent
+     - truyenfull.live  : fetch + lay the <p> ben trong #chapter-c
+     - tvtruyen.site     : fetch + lay the <p> ben trong #chapter-c
+     - xtruyen.net         : doc DOM sau 3.5s + lay <p> hoac textContent
      - truyenfree.org     : SPA, doc DOM sau render
    ==================================================================== */
 (function () {
@@ -28,9 +28,9 @@
      1. DANH SACH TRANG HO TRO
   ---------------------------------------------------------------- */
   var SUPPORTED = [
-    { label: 'TruyenFull', host: 'truyenfull.vision' },
-    { label: 'TvTruyen',   host: 'tvtruyen.co.uk'   },
-    { label: 'XTruyen',    host: 'xtruyen.vn'        },
+    { label: 'TruyenFull', host: 'truyenfull.live' },
+    { label: 'TvTruyen',   host: 'tvtruyen.site'   },
+    { label: 'XTruyen',    host: 'xtruyen.net'        },
     { label: 'TruyenFree', host: 'truyenfree.org'    }
   ];
 
@@ -38,21 +38,21 @@
      2. CAU HINH TUNG TRANG
   ---------------------------------------------------------------- */
   var SITE_CONFIGS = {
-    'truyenfull.vision': {
+    'truyenfull.live': {
       mode         : 'fetch',
       contentSel   : '#chapter-c',          // container chinh
       contentInner : 'p',                   // lay the <p> ben trong
       titleSels    : ['h2 a.chapter-title', 'h2 .chapter-title', 'h2', 'h1'],
       nextSel      : 'a#next_chap'          // selector chinh xac
     },
-    'tvtruyen.co.uk': {
+    'tvtruyen.site': {
       mode         : 'fetch',
       contentSel   : '#chapter-c',
       contentInner : 'p',
       titleSels    : ['h2.chapter-title', 'h2 a', 'h2', 'h1'],
       nextSel      : 'a#next_chap, a.btn-chapter-nav[href*="chuong-"]:not(.disabled)'
     },
-    'xtruyen.vn': {
+    'xtruyen.net': {
       mode         : 'dom',
       spa          : false,
       contentSel   : '.reading-content .text-left',
@@ -259,6 +259,9 @@
       if (next !== currentUrl) return next;
     }
     return null;
+
+
+     
   }
 
   /* ----------------------------------------------------------------
