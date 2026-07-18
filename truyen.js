@@ -1,22 +1,21 @@
 // ==UserScript==
-// @name         Truyen Extractor v8.1
+// @name         Truyen Extractor v8.2
 // @namespace    http://tampermonkey.net/
-// @version      8.1
-// @description  Hỗ trợ tải truyện từ truyenfull, tvtruyen, xtruyen, truyenfree
+// @version      8.2
+// @description  Hỗ trợ tải truyện từ truyenfull.live, tvtruyen.site, xtruyen.net
 // @author       You
-// @match        *://truyenfull.live/*
-// @match        *://tvtruyen.site/*
-// @match        *://xtruyen.net/*
-// @match        *://truyenfree.org/*
+// @match        *://*.truyenfull.live/*
+// @match        *://*.tvtruyen.site/*
+// @match        *://*.xtruyen.net/*
 // @grant        none
 // ==/UserScript==
+
 /* ====================================================================
-   truyen.js — v8.1
+   truyen.js — v8.2
    Ho tro:
      - truyenfull.live  : fetch + lay the <p> ben trong #chapter-c
      - tvtruyen.site     : fetch + lay the <p> ben trong #chapter-c
      - xtruyen.net         : doc DOM sau 3.5s + lay <p> hoac textContent
-     - truyenfree.org     : SPA, doc DOM sau render
    ==================================================================== */
 (function () {
   'use strict';
@@ -30,8 +29,7 @@
   var SUPPORTED = [
     { label: 'TruyenFull', host: 'truyenfull.live' },
     { label: 'TvTruyen',   host: 'tvtruyen.site'   },
-    { label: 'XTruyen',    host: 'xtruyen.net'        },
-    { label: 'TruyenFree', host: 'truyenfree.org'    }
+    { label: 'XTruyen',    host: 'xtruyen.net'     }
   ];
 
   /* ----------------------------------------------------------------
@@ -60,15 +58,6 @@
       titleSels    : ['h2', '.chapter-name', 'h1', '.chapter-title'],
       nextSel      : 'a.btn.next_page',
       domDelay     : 3500
-    },
-    'truyenfree.org': {
-      mode         : 'dom',
-      spa          : true,
-      contentSel   : '.chapter-content, #chapter-content, div[class*="chapter-content"]',
-      contentInner : 'p',
-      titleSels    : ['h1', 'h2', '[class*="chapter-title"]', '[class*="chapter-name"]'],
-      nextSel      : 'a[href*="chuong-"]:last-of-type, a[class*="next"], button[class*="next"]',
-      domDelay     : 2000
     }
   };
 
@@ -111,16 +100,13 @@
 
   /* ----------------------------------------------------------------
      6. HAM LAY NOI DUNG SACH - QUAN TRONG NHAT
-     - Uu tien lay cac the <p> ben trong contentSel
-     - Loc bo: dong rong, text qua ngan (<5 ky tu), 
-       text chua navigation keywords
   ---------------------------------------------------------------- */
   var NAV_PATTERNS = [
     /chuong\s*(truoc|tiep|ti[eê]p)/i,
     /ch.*\d+.*ch/i,
     /tai\s*pdf/i, /nghe\s*truy[eê]n/i, /bao\s*loi/i,
     /binh\s*luan/i, /^#\d+\s*\./,
-    /function\s+\w+\(/,           // JS inline
+    /function\s+\w+\(/,            // JS inline
     /document\./,
     /style\s*=/i,
     /^(ch|chuong)\s*truoc$/i,
@@ -145,16 +131,10 @@
 
     var lines = [];
 
-    // Xoa cac the script va style truoc khi lay text
-    var scripts = containerEl.querySelectorAll('script, style, .ads-unlock-container, .ads-unlock-reminder, [id*="ads"], [class*="ads"]');
-    // Khong xoa thuc su (vi la doc-only), thay vao do dung TreeWalker
-
     if (innerTag) {
-      // Lay tung the <p>, loc sach
       var pTags = containerEl.querySelectorAll(innerTag);
       if (pTags.length > 0) {
         pTags.forEach(function(p) {
-          // Bo qua neu la con cua div ads
           var parent = p.parentElement;
           var skip = false;
           while (parent && parent !== containerEl) {
@@ -179,7 +159,6 @@
       }
     }
 
-    // Fallback: dung TreeWalker lay text node truc tiep, bo qua node trong script/style/ads
     var walker = document.createTreeWalker(
       containerEl,
       NodeFilter.SHOW_TEXT,
@@ -240,7 +219,6 @@
   ---------------------------------------------------------------- */
   function findNextUrl(doc, nextSel, currentUrl) {
     try {
-      // Selector chinh xac truoc
       var links = doc.querySelectorAll(nextSel);
       for (var i = 0; i < links.length; i++) {
         var href = links[i].href || links[i].getAttribute('href') || '';
@@ -252,16 +230,12 @@
       }
     } catch(e) {}
 
-    // Fallback: chuong hien tai + 1
     var curN = getNumFromUrl(currentUrl);
     if (!isNaN(curN)) {
       var next = currentUrl.replace(/chuong[-_]\d+/i, 'chuong-' + (curN + 1));
       if (next !== currentUrl) return next;
     }
     return null;
-
-
-     
   }
 
   /* ----------------------------------------------------------------
@@ -276,11 +250,9 @@
       .then(function(html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
 
-        // Title
         var titleEl = findEl(doc, cfg.titleSels, 1);
         var title = titleEl ? titleEl.textContent.trim() : ('Chuong ' + getNumFromUrl(url));
 
-        // Content: lay container roi extract
         var containerEl = doc.querySelector(cfg.contentSel);
         var text = extractCleanContent(containerEl, cfg.contentInner);
 
@@ -289,7 +261,6 @@
           return;
         }
 
-        // Next URL
         var nextUrl = findNextUrl(doc, cfg.nextSel, url);
         if (nextUrl && nextUrl.charAt(0) === '/') nextUrl = location.origin + nextUrl;
 
@@ -307,7 +278,7 @@
   }
 
   /* ----------------------------------------------------------------
-     10. DOM CHAPTER (xtruyen, truyenfree)
+     10. DOM CHAPTER (xtruyen)
   ---------------------------------------------------------------- */
   function readDomChapter(callback) {
     var delay = cfg.domDelay || 2500;
@@ -360,7 +331,7 @@
   // Header
   var hdr = document.createElement('div');
   hdr.style.cssText = 'background:#27ae60;color:#fff;padding:8px 12px;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;cursor:move;';
-  hdr.innerHTML = '<span>📚 Truyen Extractor v8.1</span>';
+  hdr.innerHTML = '<span>📚 Truyen Extractor v8.2</span>';
   var closeBtn = document.createElement('span');
   closeBtn.textContent = '✕';
   closeBtn.style.cssText = 'cursor:pointer;font-size:16px;line-height:1;padding:0 4px;';
@@ -544,33 +515,7 @@
   }
 
   /* ----------------------------------------------------------------
-     17. SPA LOOP (truyenfree)
-  ---------------------------------------------------------------- */
-  function spaLoop(endNum, total) {
-    if(stopFlag){ finishCollection(); return; }
-    setStatus('Cho SPA render...');
-    readDomChapter(function(res){
-      if(stopFlag){ finishCollection(); return; }
-      if(res.error){ setStatus('⚠️ '+res.error); finishCollection(); return; }
-      collected.push({number:res.number,title:res.title,content:res.content});
-      setProgress(collected.length,total); appendPreview(res); enableDl();
-      if(res.number>=endNum||!res.nextUrl){ finishCollection(); }
-      else {
-        setStatus('Chuyen sang chuong '+(res.number+1)+'...');
-        try {
-          var nextBtn = document.querySelector(cfg.nextSel);
-          if(nextBtn&&nextBtn.href&&nextBtn.href!==location.href){ nextBtn.click(); }
-          else { history.pushState({},'',res.nextUrl); window.dispatchEvent(new PopStateEvent('popstate',{state:{}})); }
-        } catch(e) {
-          history.pushState({},'',res.nextUrl); window.dispatchEvent(new PopStateEvent('popstate',{state:{}}));
-        }
-        setTimeout(function(){ spaLoop(endNum,total); }, cfg.domDelay+500);
-      }
-    });
-  }
-
-  /* ----------------------------------------------------------------
-     18. RESUME (sau reload - chi dom mode)
+     17. RESUME (sau reload - chi dom mode)
   ---------------------------------------------------------------- */
   function tryResume() {
     if(!cfg||cfg.spa||cfg.mode!=='dom') return false;
@@ -593,7 +538,7 @@
   }
 
   /* ----------------------------------------------------------------
-     19. START
+     18. START
   ---------------------------------------------------------------- */
   startBtn.onclick = function() {
     var fromN=parseInt((document.getElementById('cex_from')||{}).value||'',10);
@@ -610,13 +555,6 @@
     if(cfg.mode==='fetch'){
       var startUrl=(!isNaN(curN)&&curN===fromN)?location.href:location.href.replace(/chuong[-_]\d+/i,'chuong-'+fromN);
       fetchLoop(startUrl,toN,total);
-    } else if(cfg.spa){
-      if(!isNaN(curN)&&curN===fromN){ spaLoop(toN,total); }
-      else {
-        var su=location.href.replace(/chuong[-_]\d+/i,'chuong-'+fromN);
-        history.pushState({},'',su); window.dispatchEvent(new PopStateEvent('popstate',{state:{}}));
-        setTimeout(function(){ spaLoop(toN,total); },cfg.domDelay+500);
-      }
     } else {
       if(!isNaN(curN)&&curN===fromN){ domLoop(toN,total); }
       else {
@@ -629,7 +567,7 @@
   };
 
   /* ----------------------------------------------------------------
-     20. STOP
+     19. STOP
   ---------------------------------------------------------------- */
   stopBtn.onclick = function() {
     stopFlag=true;
@@ -638,7 +576,7 @@
   };
 
   /* ----------------------------------------------------------------
-     21. AUTO RESUME
+     20. AUTO RESUME
   ---------------------------------------------------------------- */
   if(!tryResume()) setStatus('San sang. Nhap so chuong va nhan Bat dau.');
 
