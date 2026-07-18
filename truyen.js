@@ -1,7 +1,7 @@
 /* ====================================================================
-   truyen.js — v8.5
+   truyen.js — v8.6
    Ho tro: truyenfull.live, tvtruyen.site, xtruyen.net
-   Tich hop: Xuat file Word (.doc), Chot chan an toan chong lap vong
+   Update: Sua loi mat ten chuong, Fix loi chop trang, Chan an toan URL
    ==================================================================== */
 (function () {
   'use strict';
@@ -9,34 +9,28 @@
   if (window.__TRUYEN_CEX_RUNNING__) return;
   window.__TRUYEN_CEX_RUNNING__ = true;
 
-  /* ----------------------------------------------------------------
-     1. DANH SACH TRANG HO TRO
-  ---------------------------------------------------------------- */
   var SUPPORTED = [
     { label: 'TruyenFull', host: 'truyenfull.live' },
     { label: 'TvTruyen',   host: 'tvtruyen.site'   },
     { label: 'XTruyen',    host: 'xtruyen.net'     }
   ];
 
-  /* ----------------------------------------------------------------
-     2. CAU HINH TUNG TRANG
-  ---------------------------------------------------------------- */
   var SITE_CONFIGS = {
     'truyenfull.live': {
       mode         : 'fetch',
       contentSel   : '#chapter-c',
       contentInner : 'p',
-      titleSels    : ['h2 a.chapter-title', 'h2 .chapter-title', 'h2', 'h1'],
+      // Ưu tiên class chapter-title để lấy đúng tên chương
+      titleSels    : ['.chapter-title', '.chapter-text', 'h2 a', 'h2', 'h1'],
       nextSel      : 'a#next_chap'
     },
     'tvtruyen.site': {
-      mode         : 'dom',
-      spa          : false,
+      // Đã trả về chế độ tải ngầm (fetch) cực êm vì đã có ID chuẩn
+      mode         : 'fetch', 
       contentSel   : '#chapter-content',
       contentInner : 'p',
       titleSels    : ['#comic_name', '.truyen-title', 'h2.chapter-title', 'h1', 'h2'],
-      nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next', // Đã xóa fallback gây lỗi vòng lặp
-      domDelay     : 2500
+      nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next, a[href*="chuong-"]'
     },
     'xtruyen.net': {
       mode         : 'dom',
@@ -57,11 +51,7 @@
   function loadState() { try { var s = sessionStorage.getItem(STATE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; } }
   function clearState() { try { sessionStorage.removeItem(STATE_KEY); } catch(e) {} }
 
-  /* ----------------------------------------------------------------
-     3. BO LOC DU LIEU
-  ---------------------------------------------------------------- */
   function getNumFromUrl(url) {
-    // Nâng cấp bộ nhận diện để không bao giờ xót số chương
     var m = (url || '').match(/(?:chuong|chap)[-_]*(\d+)/i);
     return m ? parseInt(m[1], 10) : NaN;
   }
@@ -119,17 +109,20 @@
     return rawLines.filter(function(l) { return !isNavOrJunk(l); }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  // SỬA LỖI TRUYỀN FULL: Hàm này giờ sẽ trả về kết quả TỐT NHẤT ĐẦU TIÊN (Ưu tiên lấy tên chương) thay vì cái dài nhất (tên truyện)
   function findEl(doc, sels, minLen) {
     minLen = minLen || 0;
     if (typeof sels === 'string') sels = [sels];
-    var best = null, bestLen = 0;
     for (var i = 0; i < sels.length; i++) {
       try {
         var el = doc.querySelector(sels[i]);
-        if (el) { var len = (el.textContent || '').trim().length; if (len > minLen && len > bestLen) { bestLen = len; best = el; } }
+        if (el) { 
+          var len = (el.textContent || '').trim().length; 
+          if (len > minLen) return el; // Tìm thấy phát ăn luôn, không xét cái dài hơn nữa
+        }
       } catch(e) {}
     }
-    return best;
+    return null;
   }
 
   function findNextUrl(doc, nextSel, currentUrl) {
@@ -148,9 +141,6 @@
     return null;
   }
 
-  /* ----------------------------------------------------------------
-     4. XU LY DATA
-  ---------------------------------------------------------------- */
   function fetchChapter(url, callback) {
     fetch(url, { credentials: 'include' }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
       .then(function(html) {
@@ -183,9 +173,7 @@
     }, delay);
   }
 
-  /* ----------------------------------------------------------------
-     5. GIAO DIEN UI
-  ---------------------------------------------------------------- */
+  /* --- GIAO DIEN UI --- */
   var oldW = document.getElementById('__truyen_cex_popup__');
   if (oldW) oldW.remove();
   var W = document.createElement('div');
@@ -194,7 +182,7 @@
 
   var hdr = document.createElement('div');
   hdr.style.cssText = 'background:#27ae60;color:#fff;padding:8px 12px;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;cursor:move;';
-  hdr.innerHTML = '<span>📚 Truyen Extractor v8.5</span>';
+  hdr.innerHTML = '<span>📚 Truyen Extractor v8.6</span>';
   var closeBtn = document.createElement('span'); closeBtn.textContent = '✕'; closeBtn.style.cssText = 'cursor:pointer;font-size:16px;line-height:1;padding:0 4px;';
   closeBtn.onclick = function() { W.remove(); window.__TRUYEN_CEX_RUNNING__ = false; clearState(); };
   hdr.appendChild(closeBtn); W.appendChild(hdr);
@@ -254,9 +242,6 @@
   }
   makeDraggable();
 
-  /* ----------------------------------------------------------------
-     6. TRANG THAI VA XUAT FILE (.DOC)
-  ---------------------------------------------------------------- */
   var collected = [], isRunning = false, stopFlag = false;
 
   function setStatus(msg) { var e=document.getElementById('cex_status'); if(e) e.textContent=msg; }
@@ -293,9 +278,6 @@
   }
   dlBtn.onclick = doDownload;
 
-  /* ----------------------------------------------------------------
-     7. VONG LAP XU LY TAI CHUONG (Co chot chan an toan)
-  ---------------------------------------------------------------- */
   function finishCollection() {
     isRunning=false; stopFlag=false;
     var sb=document.getElementById('cex_start_btn'), xb=document.getElementById('cex_stop_btn');
@@ -316,8 +298,6 @@
       if(res.error){ setStatus('⚠️ '+res.error+' — thu lai 2s'); setTimeout(function(){ fetchLoop(url,endNum,total); },2000); return; }
       collected.push({number:res.number,title:res.title,content:res.content});
       setProgress(collected.length,total); appendPreview(res); enableDl();
-      
-      // ĐIỂM CỐT LÕI: Thêm điều kiện collected.length >= total để ngắt tuyệt đối
       if(res.number>=endNum || collected.length >= total || !res.nextUrl){ finishCollection(); }
       else setTimeout(function(){ fetchLoop(res.nextUrl,endNum,total); },900);
     });
@@ -331,8 +311,6 @@
       if(res.error){ setStatus('⚠️ '+res.error); finishCollection(); return; }
       collected.push({number:res.number,title:res.title,content:res.content});
       setProgress(collected.length,total); appendPreview(res); enableDl();
-      
-      // ĐIỂM CỐT LÕI: Ngắt ngay khi đủ số chương, chống bẻ lái link lung tung
       if(res.number>=endNum || collected.length >= total || !res.nextUrl){ finishCollection(); clearState(); }
       else {
         saveState({collected:collected,endNum:endNum,totalCount:total,nextUrl:res.nextUrl,running:true});
@@ -363,6 +341,13 @@
   }
 
   startBtn.onclick = function() {
+    var curN=getNumFromUrl(location.href);
+    // SỬA LỖI CHỚP TRANG: Bắt buộc người dùng phải đứng ở trang đọc truyện mới cho chạy
+    if(isNaN(curN)) {
+       alert("LỖI: Bạn phải BẤM VÀO ĐỌC một chương bất kỳ rồi mới được nhấn Bắt đầu!");
+       return;
+    }
+
     var fromN=parseInt((document.getElementById('cex_from')||{}).value||'',10), toN=parseInt((document.getElementById('cex_to')||{}).value||'',10);
     if(isNaN(fromN)||fromN<1){ alert('Nhap so chuong bat dau!'); return; }
     if(isNaN(toN)||toN<fromN){ alert('So chuong ket thuc phai >= bat dau!'); return; }
@@ -371,15 +356,15 @@
     if(sb){sb.disabled=true;sb.textContent='⏳ Dang chay...';}
     if(xb) xb.disabled=false; if(db) db.disabled=true;
     var ta2=document.getElementById('cex_textarea'); if(ta2) ta2.value='';
-    var total=toN-fromN+1, curN=getNumFromUrl(location.href);
+    var total=toN-fromN+1;
 
     if(cfg.mode==='fetch'){
-      var startUrl=(!isNaN(curN)&&curN===fromN)?location.href:location.href.replace(/chuong[-_]\d+/i,'chuong-'+fromN);
+      var startUrl=(!isNaN(curN)&&curN===fromN)?location.href:location.href.replace(/(chuong|chap)[-_]\d+/i,'$1-'+fromN);
       fetchLoop(startUrl,toN,total);
     } else {
       if(!isNaN(curN)&&curN===fromN){ domLoop(toN,total); }
       else {
-        var su2=location.href.replace(/chuong[-_]\d+/i,'chuong-'+fromN);
+        var su2=location.href.replace(/(chuong|chap)[-_]\d+/i,'$1-'+fromN);
         saveState({collected:[],endNum:toN,totalCount:total,nextUrl:su2,running:true});
         setStatus('Chuyen den chuong '+fromN+'...');
         setTimeout(function(){ location.href=su2; },500);
