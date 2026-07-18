@@ -1,7 +1,7 @@
 /* ====================================================================
-   truyen.js — v8.6
+   truyen.js — v8.7
    Ho tro: truyenfull.live, tvtruyen.site, xtruyen.net
-   Update: Sua loi mat ten chuong, Fix loi chop trang, Chan an toan URL
+   Update: Fix triet de loi mat ten chuong tren TvTruyen
    ==================================================================== */
 (function () {
   'use strict';
@@ -20,16 +20,15 @@
       mode         : 'fetch',
       contentSel   : '#chapter-c',
       contentInner : 'p',
-      // Ưu tiên class chapter-title để lấy đúng tên chương
       titleSels    : ['.chapter-title', '.chapter-text', 'h2 a', 'h2', 'h1'],
       nextSel      : 'a#next_chap'
     },
     'tvtruyen.site': {
-      // Đã trả về chế độ tải ngầm (fetch) cực êm vì đã có ID chuẩn
       mode         : 'fetch', 
       contentSel   : '#chapter-content',
       contentInner : 'p',
-      titleSels    : ['#comic_name', '.truyen-title', 'h2.chapter-title', 'h1', 'h2'],
+      // SỬA LỖI TẠI ĐÂY: Xóa các thẻ tên truyện, chỉ ưu tiên các thẻ chứa tên chương
+      titleSels    : ['.chapter-title', 'h2.chapter-title', 'h2', 'h1'],
       nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next, a[href*="chuong-"]'
     },
     'xtruyen.net': {
@@ -109,7 +108,6 @@
     return rawLines.filter(function(l) { return !isNavOrJunk(l); }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  // SỬA LỖI TRUYỀN FULL: Hàm này giờ sẽ trả về kết quả TỐT NHẤT ĐẦU TIÊN (Ưu tiên lấy tên chương) thay vì cái dài nhất (tên truyện)
   function findEl(doc, sels, minLen) {
     minLen = minLen || 0;
     if (typeof sels === 'string') sels = [sels];
@@ -118,7 +116,7 @@
         var el = doc.querySelector(sels[i]);
         if (el) { 
           var len = (el.textContent || '').trim().length; 
-          if (len > minLen) return el; // Tìm thấy phát ăn luôn, không xét cái dài hơn nữa
+          if (len > minLen) return el; 
         }
       } catch(e) {}
     }
@@ -182,7 +180,7 @@
 
   var hdr = document.createElement('div');
   hdr.style.cssText = 'background:#27ae60;color:#fff;padding:8px 12px;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;cursor:move;';
-  hdr.innerHTML = '<span>📚 Truyen Extractor v8.6</span>';
+  hdr.innerHTML = '<span>📚 Truyen Extractor v8.7</span>';
   var closeBtn = document.createElement('span'); closeBtn.textContent = '✕'; closeBtn.style.cssText = 'cursor:pointer;font-size:16px;line-height:1;padding:0 4px;';
   closeBtn.onclick = function() { W.remove(); window.__TRUYEN_CEX_RUNNING__ = false; clearState(); };
   hdr.appendChild(closeBtn); W.appendChild(hdr);
@@ -342,7 +340,6 @@
 
   startBtn.onclick = function() {
     var curN=getNumFromUrl(location.href);
-    // SỬA LỖI CHỚP TRANG: Bắt buộc người dùng phải đứng ở trang đọc truyện mới cho chạy
     if(isNaN(curN)) {
        alert("LỖI: Bạn phải BẤM VÀO ĐỌC một chương bất kỳ rồi mới được nhấn Bắt đầu!");
        return;
