@@ -1,7 +1,7 @@
 /* ====================================================================
-   truyen.js — v8.7
+   truyen.js — v8.8
    Ho tro: truyenfull.live, tvtruyen.site, xtruyen.net
-   Update: Fix triet de loi mat ten chuong tren TvTruyen
+   Update: Khac phuc hieu ung Ping-Pong (Chong lay nham nut Chuong Truoc)
    ==================================================================== */
 (function () {
   'use strict';
@@ -27,9 +27,8 @@
       mode         : 'fetch', 
       contentSel   : '#chapter-content',
       contentInner : 'p',
-      // SỬA LỖI TẠI ĐÂY: Xóa các thẻ tên truyện, chỉ ưu tiên các thẻ chứa tên chương
       titleSels    : ['.chapter-title', 'h2.chapter-title', 'h2', 'h1'],
-      nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next, a[href*="chuong-"]'
+      nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next, .chapter-nav a, a[href*="chuong-"]'
     },
     'xtruyen.net': {
       mode         : 'dom',
@@ -127,13 +126,25 @@
     try {
       var links = doc.querySelectorAll(nextSel);
       for (var i = 0; i < links.length; i++) {
-        var href = links[i].href || links[i].getAttribute('href') || '';
-        if (href && href !== '#' && href !== currentUrl && href.indexOf('javascript') === -1 && href.match(/chuong[-_]\d+/i)) return href;
+        var a = links[i];
+        var href = a.href || a.getAttribute('href') || '';
+        var txt = (a.textContent || '').toLowerCase();
+        var cls = (a.className || '').toLowerCase();
+        var id = (a.id || '').toLowerCase();
+
+        // CHỐT CHẶN MỚI: Bỏ qua tất cả các link có dấu hiệu là nút "Chương trước"
+        if (txt.indexOf('trước') !== -1 || txt.indexOf('prev') !== -1 || cls.indexOf('prev') !== -1 || id.indexOf('prev') !== -1) {
+            continue; 
+        }
+
+        if (href && href !== '#' && href !== currentUrl && href.indexOf('javascript') === -1 && href.match(/(chuong|chap)[-_]\d+/i)) return href;
       }
     } catch(e) {}
+    
+    // Fallback: Tự động cộng số chương nếu không tìm thấy nút Next
     var curN = getNumFromUrl(currentUrl);
     if (!isNaN(curN)) {
-      var next = currentUrl.replace(/chuong[-_]\d+/i, 'chuong-' + (curN + 1));
+      var next = currentUrl.replace(/(chuong|chap)([-_])\d+/i, '$1$2' + (curN + 1));
       if (next !== currentUrl) return next;
     }
     return null;
@@ -180,7 +191,7 @@
 
   var hdr = document.createElement('div');
   hdr.style.cssText = 'background:#27ae60;color:#fff;padding:8px 12px;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;cursor:move;';
-  hdr.innerHTML = '<span>📚 Truyen Extractor v8.7</span>';
+  hdr.innerHTML = '<span>📚 Truyen Extractor v8.8</span>';
   var closeBtn = document.createElement('span'); closeBtn.textContent = '✕'; closeBtn.style.cssText = 'cursor:pointer;font-size:16px;line-height:1;padding:0 4px;';
   closeBtn.onclick = function() { W.remove(); window.__TRUYEN_CEX_RUNNING__ = false; clearState(); };
   hdr.appendChild(closeBtn); W.appendChild(hdr);
@@ -356,12 +367,12 @@
     var total=toN-fromN+1;
 
     if(cfg.mode==='fetch'){
-      var startUrl=(!isNaN(curN)&&curN===fromN)?location.href:location.href.replace(/(chuong|chap)[-_]\d+/i,'$1-'+fromN);
+      var startUrl=(!isNaN(curN)&&curN===fromN)?location.href:location.href.replace(/(chuong|chap)([-_])\d+/i,'$1$2'+fromN);
       fetchLoop(startUrl,toN,total);
     } else {
       if(!isNaN(curN)&&curN===fromN){ domLoop(toN,total); }
       else {
-        var su2=location.href.replace(/(chuong|chap)[-_]\d+/i,'$1-'+fromN);
+        var su2=location.href.replace(/(chuong|chap)([-_])\d+/i,'$1$2'+fromN);
         saveState({collected:[],endNum:toN,totalCount:total,nextUrl:su2,running:true});
         setStatus('Chuyen den chuong '+fromN+'...');
         setTimeout(function(){ location.href=su2; },500);
