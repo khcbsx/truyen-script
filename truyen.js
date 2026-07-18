@@ -44,11 +44,13 @@
       nextSel      : 'a#next_chap'          // selector chinh xac
     },
     'tvtruyen.site': {
-      mode         : 'fetch',
-      contentSel   : '#chapter-c',
-      contentInner : 'p',
-      titleSels    : ['h2.chapter-title', 'h2 a', 'h2', 'h1'],
-      nextSel      : 'a#next_chap, a.btn-chapter-nav[href*="chuong-"]:not(.disabled)'
+      mode         : 'dom', // Đổi sang chế độ DOM để vượt qua chống bot chặn Fetch
+      spa          : false,
+      contentSel   : '#chapter-c, .chapter-content, .reading-content, #chapter-content, .chapter-c, .content', // Quét mọi tên thẻ phổ biến
+      contentInner : '', // Để trống, không ép buộc phải có thẻ <p> mới lấy chữ
+      titleSels    : ['h2.chapter-title', 'h2 a', 'h2', 'h1', '.title'],
+      nextSel      : 'a#next_chap, a.btn-chapter-nav, a.next, a[href*="chuong-"]',
+      domDelay     : 2500 // Chờ 2.5 giây cho web tải xong chữ rồi mới copy
     },
     'xtruyen.net': {
       mode         : 'dom',
